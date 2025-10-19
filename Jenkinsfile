@@ -3,8 +3,14 @@ pipeline {
 
     environment {
         APP_NAME = "go-fiber-app"
-        DOCKER_IMAGE = "wizzi/go-fiber-app"
+        DOCKER_IMAGE = "wizzidevs/go-fiber-app"
         DOCKER_TAG = "latest"
+        DOCKER_CREDENTIALS = "dockerhub-credentials"
+    }
+
+    options {
+        timestamps()
+        ansiColor('xterm')
     }
 
     stages {
@@ -16,55 +22,61 @@ pipeline {
             }
         }
 
-        stage('Build Go binary') {
+        // 🧑‍💻 DEV STAGE
+        stage('Development - Build & Local Run') {
             steps {
-                echo '🔧 Building Go application...'
+                echo '🔧 [DEV] Building Go binary...'
                 sh '''
                     go version
                     go mod tidy
                     go build -o main .
                 '''
+                echo '🚀 [DEV] Running app for quick verification...'
+                sh '''
+                    nohup ./main > app.log 2>&1 &
+                    sleep 3
+                    curl -f http://localhost:8000 || (echo "App failed to start in dev!" && exit 1)
+                    pkill main
+                '''
             }
         }
 
-        stage('Run Unit Tests') {
+        // 🧪 TEST STAGE
+        stage('Testing - Unit & Integration Tests') {
             steps {
-                echo '🧪 Running unit tests...'
+                echo '🧪 [TEST] Running unit tests...'
                 sh '''
                     go test ./... -v
                 '''
-            }
-        }
 
-        stage('Build Docker Image') {
-            steps {
-                echo '🐳 Building Docker image...'
+                echo '🐳 [TEST] Building Docker image for test...'
                 sh '''
-                    docker build -t ${DOCKER_IMAGE}:${DOCKER_TAG} .
+                    docker build -t ${DOCKER_IMAGE}:test .
                 '''
-            }
-        }
 
-        stage('Run Container Test') {
-            steps {
-                echo '🚀 Running container to verify...'
+                echo '🧩 [TEST] Running container integration test...'
                 sh '''
-                    docker run -d --rm -p 9000:8000 --name ${APP_NAME} ${DOCKER_IMAGE}:${DOCKER_TAG}
+                    docker run -d --rm -p 9000:8000 --name ${APP_NAME}_test ${DOCKER_IMAGE}:test
                     sleep 5
-                    curl -f http://localhost:9000 || (echo "App did not start correctly!" && exit 1)
-                    docker stop ${APP_NAME}
+                    curl -f http://localhost:9000 || (echo "Container test failed!" && exit 1)
+                    docker stop ${APP_NAME}_test
                 '''
             }
         }
 
-        stage('Push to Docker Hub') {
+        // 🚀 STAGING STAGE
+        stage('Staging - Push to Docker Hub') {
             when {
-                branch 'main'
+                anyOf {
+                    branch 'main'
+                    branch 'staging'
+                }
             }
             steps {
-                echo '📦 Pushing image to Docker Hub...'
-                withCredentials([usernamePassword(credentialsId: 'dockerhub-credentials', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
+                echo '📦 [STAGING] Pushing image to Docker Hub...'
+                withCredentials([usernamePassword(credentialsId: "${DOCKER_CREDENTIALS}", usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
                     sh '''
+                        docker build -t ${DOCKER_IMAGE}:${DOCKER_TAG} .
                         echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin
                         docker push ${DOCKER_IMAGE}:${DOCKER_TAG}
                     '''
@@ -75,10 +87,14 @@ pipeline {
 
     post {
         success {
-            echo '✅ Build and deploy pipeline completed successfully!'
+            echo '✅ All pipeline stages (Dev → Test → Staging) completed successfully!'
         }
         failure {
-            echo '❌ Build failed. Check the logs for details.'
+            echo '❌ Pipeline failed. Please review the logs.'
+        }
+        always {
+            echo '🧹 Cleaning up Docker resources...'
+            sh 'docker system prune -f || true'
         }
     }
 }
