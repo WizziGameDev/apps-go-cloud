@@ -24,7 +24,7 @@ pipeline {
         stage('Build & Test (Go)') {
             agent {
                 docker {
-                    image "golang:${GO_VERSION}"
+                    image "golang:${GO_VERSION}"  // Debian-based
                     args '-v $HOME/go/pkg/mod:/go/pkg/mod -v /tmp/go-cache:/go/.cache'
                 }
             }
@@ -36,6 +36,7 @@ pipeline {
                 echo "🔧 Using Go ${GO_VERSION}..."
                 sh '''
                     mkdir -p $GOTMPDIR
+                    chmod -R 777 $GOCACHE $GOTMPDIR   # pastikan bisa ditulis
                     go version
                     go mod tidy
                     go build -o main .
