@@ -24,12 +24,8 @@ pipeline {
         stage('Build & Test (Go)') {
             agent {
                 docker {
-                    image "golang:${GO_VERSION}-alpine"
-                    args '''
-                        -v $HOME/go/pkg/mod:/go/pkg/mod
-                        -v /tmp/go-cache:/go/.cache
-                        -u 1000:1000
-                    '''
+                    image "golang:${GO_VERSION}"
+                    args '-v $HOME/go/pkg/mod:/go/pkg/mod -v /tmp/go-cache:/go/.cache'
                 }
             }
             environment {
@@ -39,8 +35,7 @@ pipeline {
             steps {
                 echo "🔧 Using Go ${GO_VERSION}..."
                 sh '''
-                    # Ensure temporary directory exists
-                    mkdir -p /go/tmp
+                    mkdir -p $GOTMPDIR
                     go version
                     go mod tidy
                     go build -o main .
@@ -52,7 +47,6 @@ pipeline {
             }
         }
 
-        // 🧩 TEST Docker image di host Jenkins
         stage('Docker Build & Test') {
             steps {
                 echo '🐳 Building Docker image for integration test...'
@@ -67,7 +61,6 @@ pipeline {
             }
         }
 
-        // 🚀 Push ke Docker Hub (hanya untuk main/staging)
         stage('Push to Docker Hub') {
             when {
                 anyOf {
@@ -95,7 +88,6 @@ pipeline {
         always {
             echo '🧹 Cleaning up...'
             script {
-                // Only prune Docker system if Docker is installed
                 if (sh(script: 'which docker', returnStatus: true) == 0) {
                     sh 'docker system prune -f || true'
                 }
