@@ -1,16 +1,12 @@
 pipeline {
-    agent {
-        docker {
-            image 'golang:1.22'  // gunakan image resmi Go
-            args '-v /var/run/docker.sock:/var/run/docker.sock' // agar bisa akses Docker host
-        }
-    }
+    agent any
 
     environment {
         APP_NAME = "go-fiber-app"
         DOCKER_IMAGE = "wizzidevs/go-fiber-app"
         DOCKER_TAG = "latest"
         DOCKER_CREDENTIALS = "dockerhub-credentials"
+        GO_VERSION = "1.25.1"
     }
 
     options {
@@ -18,7 +14,6 @@ pipeline {
     }
 
     stages {
-
         stage('Checkout') {
             steps {
                 echo '📥 Checking out source code...'
@@ -26,58 +21,45 @@ pipeline {
             }
         }
 
-        // 🧑‍💻 DEV STAGE
-        stage('Development - Build & Local Run') {
-            steps {
-                script {
-                    echo '🔧 [DEV] Building Go binary...'
-                    // tangani error biar pipeline lanjut walau gagal
-                    catchError(buildResult: 'SUCCESS', stageResult: 'FAILURE') {
-                        sh '''
-                            go version
-                            go mod tidy
-                            go build -o main .
-                        '''
-                    }
-
-                    echo '🚀 [DEV] Running app for quick verification...'
-                    catchError(buildResult: 'SUCCESS', stageResult: 'FAILURE') {
-                        sh '''
-                            nohup ./main > app.log 2>&1 &
-                            sleep 3
-                            curl -f http://localhost:8000 || echo "⚠️ App failed to start in dev!"
-                            pkill main || true
-                        '''
-                    }
+        // 👷 BUILD & TEST di container Go
+        stage('Build & Test (Go)') {
+            agent {
+                docker {
+                    image "golang:${GO_VERSION}-alpine"
+                    args '-v $HOME/go/pkg/mod:/go/pkg/mod' // Cache dependencies between builds
                 }
+            }
+            steps {
+                echo "🔧 Using Go ${GO_VERSION}..."
+                sh '''
+                    go version
+                    go mod tidy
+                    go build -o main .
+                    echo "✅ Build OK"
+
+                    echo "🧪 Running unit tests..."
+                    go test ./... -v
+                '''
             }
         }
 
-        // 🧪 TEST STAGE
-        stage('Testing - Unit & Integration Tests') {
+        // 🧩 TEST Docker image di host Jenkins
+        stage('Docker Build & Test') {
             steps {
-                echo '🧪 [TEST] Running unit tests...'
-                catchError(buildResult: 'SUCCESS', stageResult: 'FAILURE') {
-                    sh 'go test ./... -v || true'
-                }
-
-                echo '🐳 [TEST] Building Docker image for test...'
+                echo '🐳 Building Docker image for integration test...'
                 sh '''
                     docker build -t ${DOCKER_IMAGE}:test .
-                '''
-
-                echo '🧩 [TEST] Running container integration test...'
-                sh '''
                     docker run -d --rm -p 9000:8000 --name ${APP_NAME}_test ${DOCKER_IMAGE}:test
                     sleep 5
-                    curl -f http://localhost:9000 || echo "⚠️ Container test failed!"
+                    curl -f http://localhost:9000 || (echo "❌ Container test failed!" && exit 1)
                     docker stop ${APP_NAME}_test
+                    echo "✅ Container test OK"
                 '''
             }
         }
 
-        // 🚀 STAGING STAGE
-        stage('Staging - Push to Docker Hub') {
+        // 🚀 Push ke Docker Hub (hanya untuk main/staging)
+        stage('Push to Docker Hub') {
             when {
                 anyOf {
                     branch 'main'
@@ -85,28 +67,36 @@ pipeline {
                 }
             }
             steps {
-                echo '📦 [STAGING] Pushing image to Docker Hub...'
+                echo '📦 Pushing image to Docker Hub...'
                 withCredentials([usernamePassword(credentialsId: "${DOCKER_CREDENTIALS}", usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
-                    sh '''
-                        docker build -t ${DOCKER_IMAGE}:${DOCKER_TAG} .
-                        echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin
-                        docker push ${DOCKER_IMAGE}:${DOCKER_TAG}
-                    '''
+                    script {
+                        docker.withRegistry('https://index.docker.io/v1/', "${DOCKER_CREDENTIALS}") {
+                            sh '''
+                                docker build -t ${DOCKER_IMAGE}:${DOCKER_TAG} .
+                                docker push ${DOCKER_IMAGE}:${DOCKER_TAG}
+                            '''
+                        }
+                    }
                 }
             }
         }
     }
 
     post {
+        always {
+            echo '🧹 Cleaning up...'
+            script {
+                // Only prune Docker system if Docker is installed
+                if (sh(script: 'which docker', returnStatus: true) == 0) {
+                    sh 'docker system prune -f || true'
+                }
+            }
+        }
         success {
-            echo '✅ All pipeline stages (Dev → Test → Staging) completed successfully!'
+            echo '✅ Pipeline completed successfully!'
         }
         failure {
-            echo '❌ Pipeline failed. Please review the logs.'
-        }
-        always {
-            echo '🧹 Cleaning up Docker resources...'
-            sh 'docker system prune -f || true'
+            echo '❌ Pipeline failed. Check logs above.'
         }
     }
 }
