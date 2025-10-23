@@ -25,8 +25,8 @@ pipeline {
             agent {
                 docker {
                     image "golang:${GO_VERSION}"
-                    // Gunakan workspace path untuk cache, bukan system path
-                    args '-v ${WORKSPACE}/.gocache:/go/.cache -v ${WORKSPACE}/.gomod:/go/pkg/mod'
+                    // Gunakan workspace path untuk cache
+                    args '-v "${WORKSPACE}/.gocache:/go/.cache" -v "${WORKSPACE}/.gomod:/go/pkg/mod"'
                     reuseNode true
                 }
             }
@@ -37,8 +37,8 @@ pipeline {
             steps {
                 echo "🔧 Using Go ${GO_VERSION}..."
                 sh '''
-                    # Setup cache directories
-                    mkdir -p ${WORKSPACE}/.gocache ${WORKSPACE}/.gomod
+                    # Setup cache directories (dengan quote untuk handle spasi)
+                    mkdir -p "${WORKSPACE}/.gocache" "${WORKSPACE}/.gomod"
 
                     # Build
                     go version
