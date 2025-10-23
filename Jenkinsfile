@@ -8,11 +8,6 @@ pipeline {
         DOCKER_CREDENTIALS = "dockerhub-credentials"
     }
 
-    options {
-        timestamps()
-        wrap([$class: 'AnsiColorBuildWrapper', colorMapName: 'xterm'])
-    }
-
     stages {
 
         stage('Checkout') {
