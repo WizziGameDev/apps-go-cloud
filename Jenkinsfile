@@ -69,12 +69,6 @@ pipeline {
         }
 
         stage('Push to Docker Hub') {
-            when {
-                anyOf {
-                    branch 'main'
-                    branch 'staging'
-                }
-            }
             steps {
                 echo '📦 Pushing image to Docker Hub...'
                 withCredentials([usernamePassword(credentialsId: "${DOCKER_CREDENTIALS}", usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
