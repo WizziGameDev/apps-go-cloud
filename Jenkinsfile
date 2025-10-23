@@ -26,6 +26,10 @@ pipeline {
             agent {
                 docker {
                     image "golang:${GO_VERSION}-alpine"
+                    args '''
+                        -v $HOME/go/pkg/mod:/go/pkg/mod
+                        -v /tmp/go-cache:/go/.cache
+                    ''' // Optional: Use cache for Go modules
                 }
             }
             environment {
@@ -35,6 +39,8 @@ pipeline {
             steps {
                 echo "🔧 Using Go ${GO_VERSION}..."
                 sh '''
+                    # Ensure temporary directory exists
+                    mkdir -p /go/tmp
                     go version
                     go mod tidy
                     go build -o main .
