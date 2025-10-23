@@ -21,15 +21,15 @@ pipeline {
             }
         }
 
-        // 👷 BUILD & TEST di container Go
         stage('Build & Test (Go)') {
             agent {
                 docker {
                     image "golang:${GO_VERSION}-alpine"
                     args '''
+                        -u 1000:1000  # Add this to run as a user that has permission
                         -v $HOME/go/pkg/mod:/go/pkg/mod
                         -v /tmp/go-cache:/go/.cache
-                    ''' // Optional: Use cache for Go modules
+                    '''
                 }
             }
             environment {
