@@ -26,8 +26,16 @@ pipeline {
             agent {
                 docker {
                     image "golang:${GO_VERSION}-alpine"
-                    args '-v $HOME/go/pkg/mod:/go/pkg/mod' // Cache dependencies between builds
+                    args '''
+                        -v $HOME/go/pkg/mod:/go/pkg/mod
+                        -v /tmp/go-cache:/go/.cache
+                        -v /tmp/go-tmp:/go/tmp
+                    ''' // Add persistent volumes for build cache
                 }
+            }
+            environment {
+                GOCACHE = "/go/.cache"
+                GOTMPDIR = "/go/tmp"
             }
             steps {
                 echo "🔧 Using Go ${GO_VERSION}..."
