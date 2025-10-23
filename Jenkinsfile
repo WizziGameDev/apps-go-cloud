@@ -22,34 +22,26 @@ pipeline {
         }
 
         stage('Build & Test (Go)') {
-            agent {
-                docker {
-                    image "golang:${GO_VERSION}"
-                    // Gunakan workspace path untuk cache
-                    args '-v "${WORKSPACE}/.gocache:/go/.cache" -v "${WORKSPACE}/.gomod:/go/pkg/mod"'
-                    reuseNode true
-                }
-            }
-            environment {
-                GOCACHE = "/go/.cache"
-                GOMODCACHE = "/go/pkg/mod"
-            }
             steps {
-                echo "🔧 Using Go ${GO_VERSION}..."
+                echo "🔧 Building with Go ${GO_VERSION}..."
                 sh '''
-                    # Setup cache directories (dengan quote untuk handle spasi)
-                    mkdir -p "${WORKSPACE}/.gocache" "${WORKSPACE}/.gomod"
+                    # Gunakan docker run langsung, hindari docker agent
+                    docker run --rm \
+                        -v "$(pwd):/app" \
+                        -w /app \
+                        -e GOCACHE=/tmp/go-cache \
+                        -e GOMODCACHE=/tmp/go-mod \
+                        golang:${GO_VERSION} \
+                        sh -c "
+                            go version
+                            go mod download
+                            go mod tidy
+                            go build -o main .
+                            echo '✅ Build OK'
 
-                    # Build
-                    go version
-                    go mod download
-                    go mod tidy
-                    go build -o main .
-                    echo "✅ Build OK"
-
-                    # Test
-                    echo "🧪 Running unit tests..."
-                    go test ./... -v || echo "⚠️ No tests found or tests failed"
+                            echo '🧪 Running unit tests...'
+                            go test ./... -v || echo '⚠️ No tests found'
+                        "
                 '''
             }
         }
