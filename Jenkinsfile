@@ -87,7 +87,7 @@ pipeline {
             echo 'Cleaning up...'
             script {
                 // Cleanup containers
-                sh 'docker rm -f ${APP_NAME}_test 2>/dev/null || true'
+                sh 'docker rm -f ${APP_NAME}_final>/dev/null || true'
 
                 // Cleanup images
                 if (sh(script: 'which docker', returnStatus: true) == 0) {
