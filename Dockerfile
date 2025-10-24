@@ -3,17 +3,17 @@ FROM golang:1.25.1-alpine AS builder
 
 WORKDIR /app
 
-# Copy go.mod & go.sum terlebih dahulu, lalu download dependencies
+# Copy go.mod & go.sum, download dependencies
 COPY go.mod go.sum ./
 RUN go mod download
 
-# Copy seluruh source code
+# Copy source code
 COPY . .
 
 # Build binary
 RUN go build -o main .
 
-# Stage 2: Run
+# Stage 2: Run Build to docker image
 FROM alpine:latest
 
 WORKDIR /root/
